@@ -97,7 +97,7 @@ const CONFIG = {
   var css = document.createElement("style");
   css.textContent = [
     "#cbs-root,#cbs-root *{box-sizing:border-box;font-family:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}",
-    "#cbs-launch{position:fixed;right:20px;bottom:20px;z-index:2147483600;display:flex;align-items:center;gap:9px;border:none;cursor:pointer;",
+    "#cbs-launch{position:fixed;right:20px;bottom:96px;z-index:2147483600;display:flex;align-items:center;gap:9px;border:none;cursor:pointer;",
     "  background:" + A + ";color:#fff;padding:13px 18px 13px 15px;border-radius:999px;box-shadow:0 8px 26px rgba(0,0,0,.28);font-size:15px;font-weight:700;transition:transform .18s ease,box-shadow .18s ease;}",
     "#cbs-launch:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,.32);}",
     "#cbs-launch svg{display:block;}",
