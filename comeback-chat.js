@@ -56,6 +56,11 @@ const CONFIG = {
     "What areas do you cover?",
     "I want to book — what's next?",
   ],
+
+  // ---- Attention-grabbing teaser popup ----
+  teaserText: "Hey! Looking to book a detail?", // little message that pops out of the bubble
+  teaserDelaySec: 18,   // seconds to wait before it appears (let them browse first)
+  teaserSound: true,    // soft chime when it appears
 };
 
 /* ========================================================================== */
@@ -71,6 +76,7 @@ const CONFIG = {
   var history = []; // {role, content}
   var busy = false;
   var opened = false;
+  var teaserDismissed = false;
 
   // ---- Build the assistant's instructions from CONFIG ----
   function systemPrompt() {
@@ -172,6 +178,15 @@ const CONFIG = {
     ".cbs-err{font-size:12.5px;color:#B42318;margin-bottom:8px;font-weight:600;}",
     ".cbs-credit{text-align:center;font-size:10.5px;color:#9AA6AE;padding:4px 0 2px;}",
     "@media (max-width:480px){#cbs-panel{right:0;bottom:0;width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;}}",
+    "#cbs-teaser{position:fixed;right:20px;bottom:150px;z-index:2147483599;max-width:240px;display:none;align-items:flex-start;gap:9px;background:#fff;color:" + INK + ";padding:13px 14px 13px 13px;border-radius:16px;border-bottom-right-radius:5px;box-shadow:0 10px 30px rgba(0,0,0,.24);}",
+    "#cbs-teaser.cbs-show{display:flex;animation:cbs-teaserin .35s cubic-bezier(.2,.9,.3,1.2) both;}",
+    ".cbs-teaser-av{width:30px;height:30px;border-radius:50%;background:" + A + ";color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;}",
+    ".cbs-teaser-msg{font-size:14px;font-weight:600;line-height:1.35;padding-top:4px;}",
+    ".cbs-teaser-x{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:none;background:" + INK + ";color:#fff;font-size:15px;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3);}",
+    "@keyframes cbs-teaserin{from{opacity:0;transform:translateY(10px) scale(.9);}to{opacity:1;transform:none;}}",
+    "@keyframes cbs-pulse{0%{box-shadow:0 8px 26px rgba(0,0,0,.28),0 0 0 0 " + A + "66;}70%{box-shadow:0 8px 26px rgba(0,0,0,.28),0 0 0 14px " + A + "00;}100%{box-shadow:0 8px 26px rgba(0,0,0,.28),0 0 0 0 " + A + "00;}}",
+    "#cbs-launch.cbs-attn{animation:cbs-pulse 1.6s ease-out 3;}",
+    "@media (prefers-reduced-motion:reduce){#cbs-launch.cbs-attn{animation:none;}#cbs-teaser.cbs-show{animation:none;}}",
     "@media (prefers-reduced-motion:reduce){#cbs-launch,#cbs-panel{transition:none;}.cbs-dot{animation:none;opacity:.6;}}",
   ].join("\n");
 
@@ -190,6 +205,14 @@ const CONFIG = {
   launch.innerHTML =
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 6.5C4 5.67 4.67 5 5.5 5h13c.83 0 1.5.67 1.5 1.5v8c0 .83-.67 1.5-1.5 1.5H10l-4 3v-3H5.5C4.67 16 4 15.33 4 14.5v-8Z" fill="#fff"/></svg>' +
     "<span>Chat / Book</span>";
+
+  // Teaser popup that slides out of the bubble to grab attention
+  var teaser = document.createElement("div");
+  teaser.id = "cbs-teaser";
+  teaser.innerHTML =
+    '<button class="cbs-teaser-x" id="cbs-teaser-x" aria-label="Dismiss">&times;</button>' +
+    '<div class="cbs-teaser-av">' + esc(CONFIG.businessName.charAt(0)) + "</div>" +
+    '<div class="cbs-teaser-msg">' + esc(CONFIG.teaserText || "Need help?") + "</div>";
 
   var panel = document.createElement("div");
   panel.id = "cbs-panel";
@@ -220,6 +243,7 @@ const CONFIG = {
     document.head.appendChild(css);
     document.head.appendChild(font);
     root.appendChild(launch);
+    root.appendChild(teaser);
     root.appendChild(panel);
     document.body.appendChild(root);
 
@@ -230,10 +254,52 @@ const CONFIG = {
     document.getElementById("cbs-send").addEventListener("click", function () { send(input.value); });
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") send(input.value); });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape" && opened) toggle(); });
+
+    // Teaser: clicking the bubble opens the chat; the X just dismisses it.
+    teaser.addEventListener("click", function () { hideTeaser(); if (!opened) toggle(); });
+    document.getElementById("cbs-teaser-x").addEventListener("click", function (e) {
+      e.stopPropagation(); hideTeaser(); teaserDismissed = true;
+    });
+
+    // Show the teaser after a delay, once, if they haven't opened the chat.
+    var delay = (CONFIG.teaserDelaySec || 18) * 1000;
+    setTimeout(function () {
+      if (opened || teaserDismissed) return;
+      teaser.classList.add("cbs-show");
+      launch.classList.add("cbs-attn");
+      if (CONFIG.teaserSound) chime();
+    }, delay);
+  }
+
+  function hideTeaser() {
+    teaser.classList.remove("cbs-show");
+    launch.classList.remove("cbs-attn");
+  }
+
+  // Soft chime using the Web Audio API (no sound file needed).
+  function chime() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      var notes = [880, 1108.7]; // a gentle two-note ding
+      notes.forEach(function (freq, i) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = freq;
+        var t = ctx.currentTime + i * 0.12;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.12, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(t); o.stop(t + 0.55);
+      });
+      setTimeout(function () { try { ctx.close(); } catch (_) {} }, 1200);
+    } catch (_) {}
   }
 
   function toggle() {
     opened = !opened;
+    if (opened) { hideTeaser(); teaserDismissed = true; }
     panel.classList.toggle("cbs-open", opened);
     launch.style.display = opened ? "none" : "flex";
     if (opened && history.length === 0) {
