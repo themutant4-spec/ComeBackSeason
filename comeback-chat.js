@@ -61,6 +61,7 @@ const CONFIG = {
   teaserText: "Hey! Looking to book a detail?", // little message that pops out of the bubble
   teaserDelaySec: 18,   // seconds to wait before it appears (let them browse first)
   teaserSound: true,    // soft chime when it appears
+  messageSound: true,   // soft blip on each chat message (like Amazon's chat)
 };
 
 /* ========================================================================== */
@@ -277,25 +278,34 @@ const CONFIG = {
   }
 
   // Soft chime using the Web Audio API (no sound file needed).
-  function chime() {
+  // ---- Sound (Web Audio API; no sound files needed) ----
+  var _audio = null;
+  function audioCtx() {
     try {
       var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      var ctx = new Ctx();
-      var notes = [880, 1108.7]; // a gentle two-note ding
-      notes.forEach(function (freq, i) {
-        var o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = "sine"; o.frequency.value = freq;
-        var t = ctx.currentTime + i * 0.12;
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(0.12, t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
-        o.connect(g); g.connect(ctx.destination);
-        o.start(t); o.stop(t + 0.55);
-      });
-      setTimeout(function () { try { ctx.close(); } catch (_) {} }, 1200);
-    } catch (_) {}
+      if (!Ctx) return null;
+      if (!_audio) _audio = new Ctx();
+      if (_audio.state === "suspended" && _audio.resume) _audio.resume();
+      return _audio;
+    } catch (_) { return null; }
   }
+  function playTones(notes, vol, dur) {
+    var ctx = audioCtx();
+    if (!ctx) return;
+    notes.forEach(function (freq, i) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      var t = ctx.currentTime + i * 0.1;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + dur + 0.05);
+    });
+  }
+  function chime() { if (CONFIG.teaserSound) playTones([880, 1108.7], 0.12, 0.5); }       // teaser ding
+  function blipSent() { if (CONFIG.messageSound) playTones([660], 0.05, 0.14); }           // soft outgoing tick
+  function blipReceived() { if (CONFIG.messageSound) playTones([523.25, 698.46], 0.07, 0.2); } // gentle incoming blip
 
   function toggle() {
     opened = !opened;
@@ -317,6 +327,7 @@ const CONFIG = {
     row.className = "cbs-row me";
     row.innerHTML = '<div class="cbs-bub">' + esc(text) + "</div>";
     msgsEl().appendChild(row); scroll();
+    blipSent();
   }
   function addBot(text) {
     var row = document.createElement("div");
@@ -324,6 +335,7 @@ const CONFIG = {
     row.innerHTML = '<div class="cbs-ava-sm">' + esc(CONFIG.businessName.charAt(0)) + "</div>" +
                     '<div class="cbs-bub">' + linkify(text) + "</div>";
     msgsEl().appendChild(row); scroll();
+    blipReceived();
   }
   function showTyping() {
     var row = document.createElement("div");
